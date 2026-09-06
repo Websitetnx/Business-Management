@@ -1,5 +1,13 @@
 # PERMIT — Web-Based Business Permit Management System
 
+## Operations update (migration 008)
+
+Adds durable email notifications with retries and delivery history, document versions
+and reviewer notes, reviewer assignments and overdue alerts, QR permit verification,
+CSV/printable reports, and encrypted database/upload backup and restore tools.
+See [installation and operations guide](docs/OPERATIONS.md) for the migration,
+worker scheduling (including XAMPP Task Scheduler), and safe restore-drill steps.
+
 PERMIT is a PHP 8 and MySQL application for applicant registration, secure sign-in, new business-permit applications, permit renewal, document submission, status tracking, and LGU administrator review.
 
 ## Included features
@@ -122,7 +130,7 @@ Use `tls` with the submission port recommended by your mail provider (commonly `
 
 For Gmail, enable 2-Step Verification and create a Google **App password** for SMTP. Put that generated app password in `SMTP_PASSWORD`; do not use the normal Google account password. Google Workspace administrators may also need to allow app-password or SMTP access for the sending account.
 
-`DOCUMENT_ALERT_ADMIN_EMAIL` is the independent recipient for invalid-document alerts. Set `APP_URL` to the public root of the permit portal so applicant and administrator emails contain trusted absolute links. Failed mail attempts are written to the standard PHP/Apache error log with a `[PERMIT mail]` prefix; application submissions remain committed even if either recipient cannot be reached.
+Application events now queue email to the registered applicant and active administrators from `users`. `DOCUMENT_ALERT_ADMIN_EMAIL` applies only to the legacy template helper, not the new workflow. Set `APP_URL` to the public portal root. Schedule `php cli/operations.php run` to deliver queued messages and retry failures; monitor Admin → Email deliveries. SMTP failures never roll back saved applications.
 
 ### Applicant account verification
 
@@ -174,7 +182,7 @@ New applications, renewals, and corrected replacement files are checked automati
 
 Missing configuration, quota exhaustion, an unavailable API, rate limiting, and failed scan storage are non-blocking: the application continues to normal BPLO review. Medical results are skipped unless `ALLOW_SENSITIVE_AI_SCAN=true`. Applicants can see per-document results and replace only files marked **Needs revision**; administrators see the pre-scan results and can still run a manual re-scan.
 
-When an automatic scan marks one or more documents invalid, PERMIT sends separate HTML and plain-text alerts to the submitted business contact email and the configured administrator address. The messages include the application reference, document type, validation reasons, AI observations, and direct applicant/admin links. A replacement file that fails its automatic re-scan triggers the same alerts.
+When a completed scan marks documents invalid, PERMIT queues HTML and plain-text alerts to the registered applicant and active administrators. Messages include the reference, failed requirement, reasons, observations and authorized application links. Replacement scans use the same queue; event/recipient keys suppress duplicate jobs. Previous uploads and scans remain in protected version history.
 
 Run the rule-boundary regression check with:
 

@@ -1478,3 +1478,16 @@ body.motion-enabled .location-status.error {
     animation: none !important;
   }
 }
+:root { --operations-gap: 1rem; }
+.ops-panel { padding: 1.4rem; margin: 1rem 0; }
+.ops-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.ops-panel table { width: 100%; border-collapse: collapse; }
+.ops-panel th, .ops-panel td { padding: .7rem; text-align: left; border-bottom: 1px solid #dde4eb; vertical-align: top; }
+.ops-toolbar { display: flex; flex-wrap: wrap; gap: 1rem; margin: 1rem 0; }
+.ops-toolbar label { display: grid; gap: .3rem; }
+.table-responsive { overflow-x: auto; }
+.permit-qr { width: 160px; margin: .5rem auto; }
+.permit-qr svg { display: block; width: 100%; height: auto; }
+.verification-page { max-width: 640px; margin: 5vh auto; }
+.verification-page dt { font-weight: bold; margin-top: 1rem; }
+@media print { .ops-toolbar, .ops-panel form { display:none !important; } .ops-panel { overflow: visible; border: 0; } .permit-qr { break-inside: avoid; } }

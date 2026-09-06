@@ -41,8 +41,8 @@ $check(str_contains($application, "\$application['status'] === 'Released'"), 'Ap
 $check(str_contains($application, "certificate.php?id="), 'Released application must link to its certificate.');
 $check(str_contains($application, 'Payment verified and permit released'), 'Released payment copy must reflect the completed release.');
 
-$check(str_contains($review, "'Released' => 'Business permit certificate '"), 'Release must create a certificate-ready message.');
-$check(str_contains($review, 'create_notification($pdo'), 'Release notice must use the shared notification helper.');
+$check(str_contains($review, 'record_status($pdo'), 'Release must persist a status event with queued notifications.');
+$check(str_contains($read('includes/functions.php'), 'notify_application($pdo'), 'Status changes must use durable notification events.');
 $check(str_contains($review, "certificate.php?id="), 'Administrator review must expose the issued certificate.');
 
 $check(str_contains($notifications, "'certificate.php'"), 'Certificate-ready notifications must route directly to the certificate.');

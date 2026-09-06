@@ -68,32 +68,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 : ($decision === 'Released'
                     ? 'Business permit certificate ready for ' . $application['business_name'] . '. Permit no. ' . ($permitNumber ?: $application['permit_number']) . ' has been released. View and download your certificate now.'
                     : 'Application ' . $application['reference'] . ' was updated to ' . $decision . '.');
-            $notice = $pdo->prepare('INSERT INTO notifications (user_id, application_id, message) VALUES (?, ?, ?)');
-            $notice->execute([$application['user_id'], $id, $message]);
+            // record_status writes transactional in-app and email notifications.
             audit($pdo, (int) $user['id'], 'update_status_' . strtolower(str_replace(' ', '_', $decision)), 'application', (int) $id);
             $pdo->commit();
 
-            // Send release email to applicant after commit
-            if ($decision === 'Released') {
-                try {
-                    require_once dirname(__DIR__) . '/includes/mailer.php';
-                    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-                    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-                    $certUrl = $protocol . '://' . $host . url('certificate.php?id=' . $id);
-                    send_permit_released_email(
-                        (string) $application['email'],
-                        (string) $application['owner_name'],
-                        (string) $application['business_name'],
-                        (string) ($permitNumber ?: $application['permit_number']),
-                        (string) $application['reference'],
-                        $certUrl
-                    );
-                } catch (Throwable) {
-                    // Email failure must never block the release — certificate is still accessible in-app
-                }
-            }
-
-            flash('success', 'The application status was updated to ' . $decision . ($decision === 'Released' ? '. A notification email has been sent to the applicant.' : '') . '.');
+            flash('success', 'The application status was updated to ' . $decision . '. Notifications are queued for delivery.');
             redirect('admin/review.php?id=' . $id);
         } catch (Throwable $e) {
             if ($pdo->inTransaction()) $pdo->rollBack();
@@ -125,6 +104,7 @@ if ($aiTablesReady) {
 render_app_header('Review Application', 'review');
 $prediction = estimate_application_timeline($pdo, $application);
 ?>
+<p><a class="button button-secondary" href="<?= e(url('admin/assignments.php?application_id=' . $id)) ?>">Assign reviewer / deadline</a> <a class="button button-secondary" href="<?= e(url('document-history.php?application_id=' . $id)) ?>">Document history and notes</a></p>
 <div class="section-heading"><div><p class="eyebrow"><?= e($application['reference']) ?></p><h2><?= e($application['business_name']) ?></h2><p class="muted"><?= e($application['owner_name']) ?> · <?= e($application['application_type']) ?> application</p></div><span class="status <?= e(status_class($application['status'])) ?>"><?= e($application['status']) ?></span></div>
 <?php if ($autoScannedCount > 0): ?><div class="auto-scan-banner"><span>AI</span><div><strong>Pre-scanned automatically on upload</strong><small><?= $autoScannedCount ?> eligible document<?= $autoScannedCount === 1 ? '' : 's' ?> already have automated results below. Open each original before deciding; manual re-scans remain available.</small></div></div><?php endif; ?>
 <div class="prediction-card">

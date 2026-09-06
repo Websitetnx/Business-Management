@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 require dirname(__DIR__) . '/includes/bootstrap.php';
-require dirname(__DIR__) . '/includes/notifications.php';
+require_once dirname(__DIR__) . '/includes/notifications.php';
 $user = require_role('applicant');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -77,6 +77,8 @@ try {
         throw new RuntimeException('Documents can only be re-uploaded when the application needs revision.');
     }
     $document = $lockedDocument;
+    $oldVersionId = snapshot_document($pdo, (int)$documentId);
+    $pdo->prepare('UPDATE document_versions SET archived_at=NOW() WHERE id=?')->execute([$oldVersionId]);
     $oldPath = $config['upload_dir'] . '/' . basename((string) $document['stored_name']);
 
     $extension = $allowedTypes[$mime];
@@ -103,15 +105,14 @@ try {
         $scanStorageAvailable = false;
     }
 
+    snapshot_document($pdo, (int)$documentId, (int)$user['id']);
+    notify_application($pdo,(int)$applicationId,'replacement:'.$storedName,'Replacement uploaded','A corrected '.$label.' file was uploaded. Review its scan results in the application.');
     if (!$pdo->commit()) {
         throw new RuntimeException('The replacement document could not be committed.');
     }
     $replacementCommitted = true;
 
-    // Delete the previous file only after the database points to the replacement.
-    if ($oldPath !== $destination && is_file($oldPath)) {
-        @unlink($oldPath);
-    }
+    // Previous file remains available through protected version history.
 } catch (Throwable $ex) {
     if ($pdo->inTransaction()) {
         try {
@@ -173,7 +174,6 @@ try {
         $pdo->prepare('UPDATE applications SET status = ?, stage = 1 WHERE id = ?')->execute([$targetStatus, $applicationId]);
         if ($targetStatus === 'For Review') {
             record_status($pdo, $applicationId, 'For Review', (int) $user['id'], 'Replacement document saved. No blocking completed scans remain; application resubmitted for review.');
-            create_notification($pdo, (int) $user['id'], 'Your replacement document for application ' . $document['reference'] . ' was saved. No blocking document scan issues remain, so the application has been resubmitted for review.', $applicationId);
             audit($pdo, (int) $user['id'], 'reupload_document_all_pass', 'application', $applicationId);
         } else {
             record_status($pdo, $applicationId, 'Needs Revision', (int) $user['id'], 'Document re-uploaded: ' . $label . '. One or more completed scans still have blocking issues.');
@@ -218,14 +218,7 @@ if ($statusUpdated && !$statusPreserved && $replacementFailed) {
         $applicationFailures,
         static fn(array $failure): bool => (int) ($failure['document_id'] ?? 0) === $documentId
     ));
-    send_application_scan_failure_emails(
-        (string) $document['applicant_email'],
-        (string) $document['applicant_name'],
-        (string) $document['reference'],
-        $replacementFailures,
-        permit_portal_url('application.php?id=' . $applicationId),
-        permit_portal_url('admin/review.php?id=' . $applicationId)
-    );
+    queue_scan_failure_alert($pdo,(int)$applicationId,$replacementFailures);
 }
 
 if (!$statusUpdated) {

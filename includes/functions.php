@@ -172,6 +172,13 @@ function require_guest(): void
 function require_login(): array
 {
     $user = current_user();
+    if ($user) {
+        $q=db()->prepare('SELECT id,name,email,role FROM users WHERE id=? AND is_active=1');
+        $q->execute([$user['id']]);
+        $user=$q->fetch() ?: null;
+        if ($user) $_SESSION['user']=$user;
+        else unset($_SESSION['user']);
+    }
     if (!$user) {
         flash('error', 'Please sign in to continue.');
         redirect('login.php');
@@ -423,6 +430,7 @@ function store_application_documents(PDO $pdo, int $applicationId): array
         }
         $movedPaths[] = $destination;
         $insert->execute([$applicationId, $field, basename($file['name']), $storedName, $mime, (int) $file['size']]);
+        snapshot_document($pdo, (int) $pdo->lastInsertId());
     }
 
     if ($errors) {
@@ -436,8 +444,21 @@ function store_application_documents(PDO $pdo, int $applicationId): array
 
 function record_status(PDO $pdo, int $applicationId, string $status, ?int $changedBy, ?string $notes = null): void
 {
-    $statement = $pdo->prepare('INSERT INTO application_status_history (application_id, status, notes, changed_by) VALUES (?, ?, ?, ?)');
-    $statement->execute([$applicationId, $status, $notes ?: null, $changedBy]);
+    $own = !$pdo->inTransaction();
+    if ($own) $pdo->beginTransaction();
+    try {
+        $lock=$pdo->prepare('SELECT id FROM applications WHERE id=? FOR UPDATE'); $lock->execute([$applicationId]);
+        $last=$pdo->prepare('SELECT status,notes FROM application_status_history WHERE application_id=? ORDER BY id DESC LIMIT 1');
+        $last->execute([$applicationId]); $previous=$last->fetch();
+        if (!$previous || $previous['status']!==$status || (string)$previous['notes']!==(string)$notes) {
+            $statement = $pdo->prepare('INSERT INTO application_status_history (application_id, status, notes, changed_by) VALUES (?, ?, ?, ?)');
+            $statement->execute([$applicationId, $status, $notes ?: null, $changedBy]);
+            $historyId=(int)$pdo->lastInsertId();
+            notify_application($pdo,$applicationId,'status:'.$historyId,$status==='Released'?'Business permit certificate ready':'Application: '.$status,
+                'Application status: '.$status.'. '.($notes ?: 'Open your application for details.'));
+        }
+        if ($own) $pdo->commit();
+    } catch (Throwable $e) { if ($own && $pdo->inTransaction()) $pdo->rollBack(); throw $e; }
 }
 
 function audit(PDO $pdo, int $userId, string $action, string $entityType, ?int $entityId = null): void
@@ -526,7 +547,7 @@ function document_scan_advisory_issues(mixed $issues): array
 function application_scan_failures(PDO $pdo, int $applicationId): array
 {
     try {
-        $statement = $pdo->prepare("SELECT d.id, d.document_type, s.detected_document_type, s.matches_expected_type, s.quality_score, s.confidence_score, s.issues
+        $statement = $pdo->prepare("SELECT d.id, d.document_type, s.detected_document_type, s.matches_expected_type, s.quality_score, s.confidence_score, s.issues, s.summary
             FROM application_documents d
             JOIN document_ai_scans s ON s.document_id = d.id AND s.scan_status = 'Completed'
             WHERE d.application_id = ?
@@ -550,6 +571,7 @@ function application_scan_failures(PDO $pdo, int $applicationId): array
             'label' => $documentLabel,
             'reasons' => $reasons,
             'issues' => document_scan_advisory_issues($document['issues'] ?? null),
+            'summary' => $document['summary'] ?? '',
             'document_id' => (int) $document['id'],
         ];
     }
@@ -678,6 +700,7 @@ function auto_scan_uploaded_documents(PDO $pdo, int $applicationId, int $userId,
                     $applicationId,
                     (string) $document['stored_name'],
                 ]);
+                snapshot_document($pdo, $currentDocumentId);
             } catch (Throwable) {
                 // A concurrent/manual scan or unavailable scan table remains nonblocking.
             }
@@ -702,6 +725,7 @@ function auto_scan_uploaded_documents(PDO $pdo, int $applicationId, int $userId,
                 $applicationId,
                 (string) $document['stored_name'],
             ]);
+            if ($saveCompleted->rowCount() === 1) snapshot_document($pdo, $currentDocumentId);
             if ($saveCompleted->rowCount() !== 1) {
                 return application_scan_failures($pdo, $applicationId);
             }

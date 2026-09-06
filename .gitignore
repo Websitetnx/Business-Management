@@ -3,3 +3,5 @@
 /config.local.php
 /.env
 /vendor/
+/storage/maintenance.lock
+*.backup.zip

@@ -49,6 +49,7 @@ try {
 
 render_app_header('Application Details', $canManageApplications ? 'review' : 'track');
 ?>
+<p><a class="button button-secondary" href="<?= e(url('document-history.php?application_id=' . $application['id'])) ?>">Document version history</a></p>
 <div class="section-heading"><div><p class="eyebrow"><?= e($application['reference']) ?></p><h2><?= e($application['business_name']) ?></h2><p class="muted"><?= e($application['application_type']) ?> application · Submitted <?= e(date('F j, Y', strtotime($application['submitted_at']))) ?></p></div><span class="status <?= e(status_class($application['status'])) ?>"><?= e($application['status']) ?></span></div>
 <ol class="timeline panel timeline-panel">
   <?php foreach (['Submitted', 'Validation', 'Assessment & payment', 'Permit release'] as $stage => $label): $step = $stage + 1; ?>

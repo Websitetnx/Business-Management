@@ -47,6 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $applicationId = (int) $pdo->lastInsertId();
             $uploadErrors = store_application_documents($pdo, $applicationId);
             if ($uploadErrors) throw new RuntimeException(implode(' ', $uploadErrors));
+            notify_application($pdo,$applicationId,'submitted:'.$applicationId,'Application submitted','Your renewal was received. Documents will be checked before BPLO review.');
 
             // Persist before contacting the external AI service so scanning is
             // advisory and never holds the renewal transaction open.
@@ -59,17 +60,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($scanFailures) {
                 $pdo->prepare("UPDATE applications SET status = 'Needs Revision', stage = 1 WHERE id = ?")->execute([$applicationId]);
                 record_status($pdo, $applicationId, 'Needs Revision', (int) $user['id'], 'Auto-scan detected document issues requiring correction.');
-                create_document_scan_failure_notifications($pdo, (int) $user['id'], $applicationId, $reference, $scanFailures, 'renewal');
+                queue_scan_failure_alert($pdo,$applicationId,$scanFailures);
                 audit($pdo, (int) $user['id'], 'submit_renewal', 'application', $applicationId);
                 $pdo->commit();
-                send_application_scan_failure_emails(
-                    $email,
-                    (string) $user['name'],
-                    $reference,
-                    $scanFailures,
-                    permit_portal_url('application.php?id=' . $applicationId),
-                    permit_portal_url('admin/review.php?id=' . $applicationId)
-                );
+
                 flash('error', 'Your renewal was saved, but automated verification found documents that need revision. Review the results below and re-upload those files.');
                 redirect('application.php?id=' . $applicationId);
             } else {

@@ -67,6 +67,10 @@ $backPath = $canManageApplications
     : 'application.php?id=' . $applicationId;
 
 render_app_header('Business Permit Certificate', $canManageApplications ? 'review' : 'track');
+$verification = permit_verification_record($pdo, (int)$applicationId);
+$publicRoot = rtrim((string)app_config('app_url'), '/');
+$verificationUrl = filter_var($publicRoot, FILTER_VALIDATE_URL) && in_array(parse_url($publicRoot, PHP_URL_SCHEME), ['https','http'], true)
+    ? $publicRoot . '/verify-permit.php?token=' . $verification['token'] : '';
 ?>
 <div class="certificate-toolbar">
   <a class="button button-secondary" href="<?= e(url($backPath)) ?>">&larr; Back to application</a>
@@ -114,10 +118,16 @@ render_app_header('Business Permit Certificate', $canManageApplications ? 'revie
         <small>Authorized releasing officer</small>
       </div>
       <div class="certificate-verification">
+        <?php if ($verificationUrl): ?>
+        <div class="permit-qr" data-permit-verification="<?= e($verificationUrl) ?>"></div>
+        <a href="<?= e($verificationUrl) ?>">Verify current permit status</a>
+        <?php else: ?><p>Online verification link unavailable. Contact the issuing BPLO.</p><?php endif; ?>
         <strong>System-generated certificate</strong>
         <p>Verify this record in PERMIT using permit number <b><?= e($certificate['permit_number']) ?></b> or application reference <b><?= e($certificate['reference']) ?></b>.</p>
       </div>
     </footer>
   </div>
 </article>
+<script src="<?= e(url('assets/vendor/qrcode.js')) ?>"></script>
+<script src="<?= e(url('assets/permit-qr.js')) ?>"></script>
 <?php render_app_footer(); ?>

@@ -30,6 +30,7 @@ function render_app_header(string $title, string $active): void
       <nav>
         <p class="nav-label"><?= $isTreasurer ? 'City Treasurer' : ($isAdmin ? 'LGU administrator' : 'Applicant portal') ?></p>
         <?php if ($isTreasurer): ?>
+          <a href="<?= e(url('admin/reports.php?type=collections')) ?>">Collections report</a>
           <a class="<?= $active === 'payments' ? 'active' : '' ?>" href="<?= e(url('admin/payments.php')) ?>"><span>₱</span> Payments</a>
         <?php elseif ($isAdmin): ?>
           <a class="<?= $active === 'admin-dashboard' ? 'active' : '' ?>" href="<?= e(url('admin/index.php')) ?>"><span>⌂</span> Overview</a>
@@ -37,6 +38,9 @@ function render_app_header(string $title, string $active): void
           <a class="<?= $active === 'analytics' ? 'active' : '' ?>" href="<?= e(url('admin/analytics.php')) ?>"><span>⌁</span> AI analytics</a>
           <a class="<?= $active === 'payments' ? 'active' : '' ?>" href="<?= e(url('admin/payments.php')) ?>"><span>₱</span> Payments</a>
           <a class="<?= $active === 'fee-settings' ? 'active' : '' ?>" href="<?= e(url('admin/fee-settings.php')) ?>"><span>∑</span> Fee settings</a>
+          <a href="<?= e(url('admin/assignments.php')) ?>">Reviewer assignments</a>
+          <a href="<?= e(url('admin/email-deliveries.php')) ?>">Email deliveries</a>
+          <a href="<?= e(url('admin/reports.php')) ?>">Reports and exports</a>
           <a class="<?= $active === 'users' ? 'active' : '' ?>" href="<?= e(url('admin/users.php')) ?>"><span>♙</span> User accounts</a>
         <?php else: ?>
           <a class="<?= $active === 'dashboard' ? 'active' : '' ?>" href="<?= e(url('dashboard.php')) ?>"><span>⌂</span> Dashboard</a>

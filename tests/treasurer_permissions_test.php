@@ -69,7 +69,7 @@ $notifications = $read('api/notifications.php');
 $assert(str_contains($notifications, "if (!is_treasurer_role"), 'Treasurer notification fetch must skip renewal workflow mutations.');
 $assert(str_contains($notifications, "admin/payment.php?id="), 'Treasurer notifications must link to payment details.');
 $assert(str_contains($read('app.js'), 'item.detail_url || null'), 'Notification UI must use the server-authorized detail URL.');
-$assert(str_contains($read('payment.php'), "role IN ('admin', 'treasurer')"), 'Payment submissions must notify active Treasurer accounts.');
+$assert(str_contains($read('payment.php'), "role = 'treasurer'"), 'Payment submissions must notify active Treasurer accounts; administrators use the outbox.');
 $assert(str_contains($read('admin/payment-action.php'), "'admin/payment.php?id='"), 'Payment actions must return to the payment-only detail page.');
 $assert(str_contains($read('payment-proof.php'), 'can_manage_payments'), 'Payment proof access must use the payment capability.');
 $assert(str_contains($read('receipt.php'), 'can_manage_payments'), 'Receipt access must use the payment capability.');

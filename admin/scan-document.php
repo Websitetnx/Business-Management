@@ -43,8 +43,18 @@ try {
     if ($lastScannedAt && strtotime((string) $lastScannedAt) > time() - 30) {
         throw new RuntimeException('Please wait 30 seconds before scanning the same document again.');
     }
+    snapshot_document($pdo, (int)$documentId);
     $attemptedApi = true;
     $result = scan_permit_document($path, $document['original_name'], $document['mime_type'], $expectedType, (int) $user['id']);
+    $pdo->beginTransaction();
+    $guard=$pdo->prepare('SELECT stored_name FROM application_documents WHERE id=? FOR UPDATE');
+    $guard->execute([$documentId]);
+    if ($guard->fetchColumn() !== $document['stored_name']) {
+        $pdo->rollBack();
+        $attemptedApi=false;
+        throw new RuntimeException('The applicant replaced this file during the scan. Please scan the current version.');
+    }
+    snapshot_document($pdo, (int)$documentId);
     $save = $pdo->prepare("INSERT INTO document_ai_scans
         (document_id, application_id, scan_status, detected_document_type, matches_expected_type, quality_score, confidence_score, extracted_fields, issues, summary, requires_human_review, model, error_message, scanned_by)
         VALUES (?, ?, 'Completed', ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
@@ -63,14 +73,25 @@ try {
         $model,
         $user['id'],
     ]);
+    snapshot_document($pdo, (int)$documentId);
+    queue_scan_failure_alert($pdo,(int)$document['application_id'],application_scan_failures($pdo,(int)$document['application_id']));
     audit($pdo, (int) $user['id'], 'ai_scan_document', 'application_document', (int) $documentId);
+    $pdo->commit();
     flash('success', 'AI document scan completed. Review the advisory findings against the original file.');
 } catch (Throwable $exception) {
+    if ($pdo->inTransaction()) $pdo->rollBack();
     if ($attemptedApi) {
         try {
+            $pdo->beginTransaction();
+            $guard=$pdo->prepare('SELECT stored_name FROM application_documents WHERE id=? FOR UPDATE');
+            $guard->execute([$documentId]);
+            if ($guard->fetchColumn() !== $document['stored_name']) throw new RuntimeException('File replaced.');
             $save = $pdo->prepare("INSERT INTO document_ai_scans (document_id, application_id, scan_status, model, error_message, scanned_by) VALUES (?, ?, 'Failed', ?, ?, ?) ON DUPLICATE KEY UPDATE scan_status = 'Failed', model = VALUES(model), error_message = VALUES(error_message), scanned_by = VALUES(scanned_by), scanned_at = CURRENT_TIMESTAMP");
             $save->execute([$documentId, $document['application_id'], $model, substr($exception->getMessage(), 0, 1000), $user['id']]);
+            snapshot_document($pdo, (int)$documentId);
+            $pdo->commit();
         } catch (Throwable) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
             // The migration may not have been imported yet; the user-facing error below still explains the failure.
         }
     }

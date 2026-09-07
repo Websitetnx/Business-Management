@@ -66,8 +66,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $update = $pdo->prepare("UPDATE payments SET payment_method = ?, payer_name = ?, payment_reference = ?, status = 'Pending', proof_original_name = COALESCE(?, proof_original_name), proof_stored_name = COALESCE(?, proof_stored_name), proof_mime_type = COALESCE(?, proof_mime_type), submitted_at = NOW(), verified_by = NULL, verified_at = NULL, admin_notes = NULL WHERE id = ? AND application_id = ?");
             $update->execute([$method, $payerName, $reference, $newStoredName ? basename((string) $file['name']) : null, $newStoredName, $mime, $payment['id'], $applicationId]);
             $message = 'Payment submitted for application ' . $payment['application_reference'] . ' and is awaiting verification.';
-            $notice = $pdo->prepare("INSERT INTO notifications (user_id, application_id, message) SELECT id, ?, ? FROM users WHERE role IN ('admin', 'treasurer') AND is_active = 1");
+            $notice = $pdo->prepare("INSERT INTO notifications (user_id, application_id, message) SELECT id, ?, ? FROM users WHERE role = 'treasurer' AND is_active = 1");
             $notice->execute([$applicationId, $message]);
+            notify_application($pdo,(int)$applicationId,'payment-submitted:'.$payment['id'].':'.hash('sha256',$reference.':'.($newStoredName??'').':'.date('Y-m-d H:i:s')),'Payment submitted',$message);
             audit($pdo, (int) $user['id'], 'submit_payment', 'payment', (int) $payment['id']);
             $pdo->commit();
             if ($newStoredName && $oldStoredName && $oldStoredName !== $newStoredName) {

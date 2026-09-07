@@ -83,12 +83,13 @@ final class AuthOtpTestPdo extends PDO
 
     public function insertChallenge(array $params, int $expirySeconds): void
     {
-        [$email, $purpose, $otpHash, $userId, $pendingName, $pendingPasswordHash] = $params;
+        [$requestTokenHash, $email, $purpose, $otpHash, $userId, $pendingName, $pendingPasswordHash] = $params;
         $now = time();
         $id = $this->nextId++;
         $this->lastId = $id;
         $this->rows[$id] = [
             'id' => $id,
+            'request_token_hash' => $requestTokenHash,
             'email' => $email,
             'purpose' => $purpose,
             'otp_hash' => $otpHash,
@@ -186,10 +187,11 @@ final class AuthOtpTestStatement extends PDOStatement
         }
 
         if (str_starts_with($this->query, 'SELECT id, email, purpose')) {
-            [$id, $email, $purpose] = $params;
+            [$id, $requestTokenHash, $email, $purpose] = $params;
             $row = $this->pdo->rows[(int) $id] ?? null;
             $maxAttempts = $this->numberAfter('GREATEST(0, ', 5);
             if ($row
+                && $row['request_token_hash'] === $requestTokenHash
                 && $row['email'] === $email
                 && $row['purpose'] === $purpose
                 && $row['consumed_at'] === null
@@ -207,7 +209,7 @@ final class AuthOtpTestStatement extends PDOStatement
         if (str_contains($this->query, 'SET attempts = ?')) {
             $attempts = (int) $params[0];
             $maxAttempts = $this->numberAfter('>= ', 5);
-            $id = (int) $params[array_key_last($params)];
+            $id = (int) $params[count($params) - 2];
             if (isset($this->pdo->rows[$id]) && $this->pdo->rows[$id]['consumed_at'] === null) {
                 $this->pdo->rows[$id]['attempts'] = $attempts;
                 if ($attempts >= $maxAttempts) {
@@ -343,7 +345,7 @@ $assert(password_verify($registrationCode, $storedRegistration['otp_hash']), 'Th
 $assert($storedRegistration['pending_password_hash'] === $pendingHash, 'Registration data should retain only the pending password hash.');
 $assert(!array_key_exists('otp_hash', $registration), 'Public challenge results must not expose the OTP hash.');
 
-$usable = auth_otp_challenge($pdo, $registrationId, 'new.applicant@example.com', 'registration');
+$usable = auth_otp_challenge($pdo, $registrationId, $registration['request_token'], 'new.applicant@example.com', 'registration');
 $assert(is_array($usable) && !array_key_exists('otp_hash', $usable), 'Challenge lookup must not expose the OTP hash.');
 
 $wrongCode = $registrationCode === '999999' ? '000000' : '999999';
@@ -352,6 +354,7 @@ $assert(
     consume_auth_otp(
         $pdo,
         $registrationId,
+        $registration['request_token'],
         'new.applicant@example.com',
         'registration',
         $wrongCode,
@@ -368,6 +371,7 @@ $assert(
     consume_auth_otp(
         $pdo,
         $registrationId,
+        $registration['request_token'],
         'NEW.APPLICANT@example.com',
         'registration',
         $registrationCode,
@@ -386,7 +390,7 @@ $assert(
     'Consumed registration challenges must clear OTP and pending credential data.'
 );
 $assert(
-    !consume_auth_otp($pdo, $registrationId, 'new.applicant@example.com', 'registration', $registrationCode, static fn() => null),
+    !consume_auth_otp($pdo, $registrationId, $registration['request_token'], 'new.applicant@example.com', 'registration', $registrationCode, static fn() => null),
     'A consumed OTP must not be reusable.'
 );
 
@@ -406,6 +410,7 @@ $throws(
     static fn() => consume_auth_otp(
         $pdo,
         $resetId,
+        $reset['request_token'],
         'reset@example.com',
         'password_reset',
         $resetCode,
@@ -418,7 +423,7 @@ $throws(
 );
 $assert($pdo->rows[$resetId]['consumed_at'] === null, 'Callback failure should roll back OTP consumption.');
 $assert(
-    consume_auth_otp($pdo, $resetId, 'reset@example.com', 'password_reset', $resetCode, static fn() => null),
+    consume_auth_otp($pdo, $resetId, $reset['request_token'], 'reset@example.com', 'password_reset', $resetCode, static fn() => null),
     'An OTP should remain usable after its transactional callback rolls back.'
 );
 
@@ -434,9 +439,9 @@ $expired = issue_auth_otp($pdo, [
 });
 $expiredId = (int) $expired['id'];
 $pdo->rows[$expiredId]['expires_at'] = time() - 1;
-$assert(auth_otp_challenge($pdo, $expiredId, 'expired@example.com', 'password_reset') === null, 'Expired challenges must not be returned as usable.');
+$assert(auth_otp_challenge($pdo, $expiredId, $expired['request_token'], 'expired@example.com', 'password_reset') === null, 'Expired challenges must not be returned as usable.');
 $assert(
-    !consume_auth_otp($pdo, $expiredId, 'expired@example.com', 'password_reset', (string) $expiredMail['code'], static fn() => null),
+    !consume_auth_otp($pdo, $expiredId, $expired['request_token'], 'expired@example.com', 'password_reset', (string) $expiredMail['code'], static fn() => null),
     'An expired OTP must not be accepted.'
 );
 
@@ -459,6 +464,7 @@ for ($attemptNumber = 1; $attemptNumber <= 5; $attemptNumber++) {
     $accepted = consume_auth_otp(
         $pdo,
         $attemptId,
+        $attempt['request_token'],
         'attempt-limit@example.com',
         'password_reset',
         $badAttemptCode,
@@ -477,7 +483,7 @@ $assert(
     'Attempt-locked challenges must clear OTP and pending credential data.'
 );
 $assert(
-    !consume_auth_otp($pdo, $attemptId, 'attempt-limit@example.com', 'password_reset', $attemptCode, static fn() => null),
+    !consume_auth_otp($pdo, $attemptId, $attempt['request_token'], 'attempt-limit@example.com', 'password_reset', $attemptCode, static fn() => null),
     'The correct OTP must fail after the attempt limit is reached.'
 );
 $assert($limitedCallbackRuns === 0, 'Attempt-limited challenges must never run the success callback.');
@@ -545,6 +551,6 @@ $assert(str_contains($read('login.php'), 'forgot-password.php'), 'The sign-in pa
 $migration = $read('database/migrations/007_auth_otp.sql');
 $assert(str_contains($migration, 'auth_otp_challenges'), 'Migration 007 must create the OTP challenge table.');
 $assert(str_contains($migration, 'otp_hash'), 'Migration 007 must persist only the OTP hash.');
-$assert(str_contains($migration, 'UNIQUE'), 'Migration 007 must enforce one challenge per email and purpose.');
+$assert(str_contains($migration, 'UNIQUE'), 'Migration 007 must enforce unique request-token bindings.');
 
 echo "Authentication OTP regression tests passed ({$checks} checks; no email sent and no production database used).\n";

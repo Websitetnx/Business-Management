@@ -149,6 +149,7 @@ function send_app_mail(array $message, ?callable $transport = null): void
         $mailer->addAddress($toEmail, $toName);
         $mailer->isHTML(true);
         $mailer->Subject = $subject;
+        if (isset($message['message_id'])) $mailer->MessageID = (string) $message['message_id'];
         $mailer->Body = $htmlBody;
         $mailer->AltBody = $textBody;
         $mailer->send();

@@ -51,7 +51,7 @@ if (extension_loaded('pdo_sqlite')) {
     $pdo = new PDO('sqlite::memory:');
     $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
     $pdo->exec('CREATE TABLE application_documents (id INTEGER PRIMARY KEY, application_id INTEGER, document_type TEXT)');
-    $pdo->exec('CREATE TABLE document_ai_scans (document_id INTEGER PRIMARY KEY, scan_status TEXT, detected_document_type TEXT, matches_expected_type INTEGER, quality_score INTEGER, confidence_score INTEGER, issues TEXT)');
+    $pdo->exec('CREATE TABLE document_ai_scans (document_id INTEGER PRIMARY KEY, scan_status TEXT, detected_document_type TEXT, matches_expected_type INTEGER, quality_score INTEGER, confidence_score INTEGER, issues TEXT, summary TEXT)');
     $pdo->exec('CREATE TABLE notifications (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, application_id INTEGER, message VARCHAR(500))');
     $insertDocument = $pdo->prepare('INSERT INTO application_documents (id, application_id, document_type) VALUES (?, 1, ?)');
     $insertScan = $pdo->prepare('INSERT INTO document_ai_scans (document_id, scan_status, detected_document_type, matches_expected_type, quality_score, confidence_score, issues) VALUES (?, ?, ?, ?, ?, ?, ?)');

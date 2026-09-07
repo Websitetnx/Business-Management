@@ -21,6 +21,16 @@ require_once __DIR__ . '/openai.php';
 require_once __DIR__ . '/analytics.php';
 require_once __DIR__ . '/prediction.php';
 require_once __DIR__ . '/notifications.php';
+require_once __DIR__ . '/operations.php';
+
+// Shared request lock lets CLI backup wait for active requests before taking an exclusive lock.
+$maintenanceLock = fopen(dirname(__DIR__) . '/storage/maintenance.lock', 'c');
+if (!$maintenanceLock || !flock($maintenanceLock, LOCK_SH | LOCK_NB)) {
+    http_response_code(503);
+    header('Retry-After: 60');
+    exit('Scheduled maintenance is in progress. Please try again shortly.');
+}
+register_shutdown_function(static function () use ($maintenanceLock): void { flock($maintenanceLock, LOCK_UN); fclose($maintenanceLock); });
 
 date_default_timezone_set((string) app_config('timezone'));
 

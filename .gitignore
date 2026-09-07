@@ -1,7 +1,0 @@
-/storage/uploads/*
-!/storage/uploads/.gitkeep
-/config.local.php
-/.env
-/vendor/
-/storage/maintenance.lock
-*.backup.zip

@@ -54,6 +54,7 @@ jobs:
           git show 099fd691e0147ecde59e08d0ba73ff072d8f13f6:database/schema.sql | sed -e '/^CREATE DATABASE IF NOT EXISTS permitflow/,+2d' -e '/^USE permitflow;/d' | mysql -h127.0.0.1 -uroot permit_test_upgrade
           mysql -h127.0.0.1 -uroot permit_test_upgrade < database/migrations/008_operations.sql
       - run: php tests/operations_integration_test.php
+      - run: php tests/operations_http_test.php
       - name: QR round trip
         run: |
           npm install --prefix "$RUNNER_TEMP/permit-qr-tests" jsqr@1.4.0

@@ -209,7 +209,7 @@ final class AuthOtpTestStatement extends PDOStatement
         if (str_contains($this->query, 'SET attempts = ?')) {
             $attempts = (int) $params[0];
             $maxAttempts = $this->numberAfter('>= ', 5);
-            $id = (int) $params[array_key_last($params)];
+            $id = (int) $params[count($params) - 2];
             if (isset($this->pdo->rows[$id]) && $this->pdo->rows[$id]['consumed_at'] === null) {
                 $this->pdo->rows[$id]['attempts'] = $attempts;
                 if ($attempts >= $maxAttempts) {
@@ -554,4 +554,3 @@ $assert(str_contains($migration, 'otp_hash'), 'Migration 007 must persist only t
 $assert(str_contains($migration, 'UNIQUE'), 'Migration 007 must enforce unique request-token bindings.');
 
 echo "Authentication OTP regression tests passed ({$checks} checks; no email sent and no production database used).\n";
-

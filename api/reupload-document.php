@@ -178,6 +178,11 @@ try {
         } else {
             record_status($pdo, $applicationId, 'Needs Revision', (int) $user['id'], 'Document re-uploaded: ' . $label . '. One or more completed scans still have blocking issues.');
             audit($pdo, (int) $user['id'], 'reupload_document', 'application_document', $documentId);
+            if ($replacementFailed) {
+                queue_scan_failure_alert($pdo, (int)$applicationId, array_values(array_filter(
+                    $applicationFailures, static fn(array $failure): bool => (int)$failure['document_id'] === $documentId
+                )));
+            }
         }
     }
 
@@ -194,31 +199,9 @@ try {
         }
     }
 
-    // Status/history/notification failures must not turn a saved replacement
-    // into an upload failure. Apply the decision only while no newer status has
-    // replaced Needs Revision.
-    try {
-        $fallback = $pdo->prepare("UPDATE applications SET status = ?, stage = 1 WHERE id = ? AND user_id = ? AND status = 'Needs Revision'");
-        $fallback->execute([$targetStatus, $applicationId, (int) $user['id']]);
-        $currentStatus = $pdo->prepare('SELECT status FROM applications WHERE id = ? AND user_id = ?');
-        $currentStatus->execute([$applicationId, (int) $user['id']]);
-        $currentStatusValue = $currentStatus->fetchColumn();
-        $statusUpdated = $currentStatusValue !== false;
-        if ($statusUpdated && (string) $currentStatusValue !== $targetStatus) {
-            $statusPreserved = true;
-            $preservedStatus = (string) $currentStatusValue;
-        }
-    } catch (Throwable) {
-        $statusUpdated = false;
-    }
-}
-
-if ($statusUpdated && !$statusPreserved && $replacementFailed) {
-    $replacementFailures = array_values(array_filter(
-        $applicationFailures,
-        static fn(array $failure): bool => (int) ($failure['document_id'] ?? 0) === $documentId
-    ));
-    queue_scan_failure_alert($pdo,(int)$applicationId,$replacementFailures);
+    // Keep the committed replacement, but do not change status without its
+    // durable history and notification event. Staff can review the saved upload.
+    $statusUpdated = false;
 }
 
 if (!$statusUpdated) {

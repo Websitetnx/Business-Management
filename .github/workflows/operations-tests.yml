@@ -39,13 +39,14 @@ jobs:
         run: find . -path ./vendor -prune -o -name '*.php' -print0 | xargs -0 -n1 php -l
       - name: Existing regression tests
         run: |
-          php tests/auth_otp_test.php
-          php tests/auto_scan_rules_test.php
-          php tests/document_validation_email_test.php
-          php tests/treasurer_permissions_test.php
-          php tests/business_certificate_test.php
-          php tests/motion_system_test.php
+          result=0
+          for test in tests/auth_otp_test.php tests/auto_scan_rules_test.php tests/document_validation_email_test.php tests/treasurer_permissions_test.php tests/business_certificate_test.php tests/motion_system_test.php; do
+            php "$test" || result=1
+          done
+          exit "$result"
       - name: Prepare isolated databases and verify upgrade migration
+        id: database
+        if: ${{ !cancelled() }}
         env:
           MYSQL_PWD: test-password-only
         run: |
@@ -54,8 +55,12 @@ jobs:
           git show 099fd691e0147ecde59e08d0ba73ff072d8f13f6:database/schema.sql | sed -e '/^CREATE DATABASE IF NOT EXISTS permitflow/,+2d' -e '/^USE permitflow;/d' | mysql -h127.0.0.1 -uroot permit_test_upgrade
           mysql -h127.0.0.1 -uroot permit_test_upgrade < database/migrations/008_operations.sql
       - run: php tests/operations_integration_test.php
+        id: operations
+        if: ${{ !cancelled() && steps.database.outcome == 'success' }}
       - run: php tests/operations_http_test.php
+        if: ${{ !cancelled() && steps.operations.outcome == 'success' }}
       - name: QR round trip
+        if: ${{ !cancelled() }}
         run: |
           npm install --prefix "$RUNNER_TEMP/permit-qr-tests" jsqr@1.4.0
           QR_DECODER_PATH="$RUNNER_TEMP/permit-qr-tests/node_modules/jsqr" node tests/qr_test.cjs

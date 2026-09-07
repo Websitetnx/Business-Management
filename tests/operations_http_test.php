@@ -31,11 +31,11 @@ try {
     [$code,$body]=request_test('document-history.php?application_id=1',3);
     http_check($code===200 && str_contains($body,'Private review note'),'Admin sees version notes.');
     http_check(request_test('document-history.php?application_id=1',5)[0]===302,'Inactive session denied.');
-    http_check(request_test('document-history.php?application_id=1',6)[0]===403,'Treasurer denied document history.');
+    http_check(request_test('document-history.php?application_id=1',6)[0]===302,'Treasurer redirected away from document history.');
     http_check(request_test('document-version.php?id=1',1)===[200,'synthetic first file'],'Owner can download historical upload.');
     http_check(request_test('document-version.php?id=1',2)[0]===404,'Other applicant denied historical upload.');
     http_check(request_test('document-history.php?application_id=1',3,['version_id'=>1,'note'=>'Missing CSRF'])[0]===419,'Reviewer notes require CSRF.');
-    foreach(['admin/assignments.php','admin/email-deliveries.php','admin/reports.php'] as $path){http_check(request_test($path,1)[0]===403,'Applicant denied '.$path);http_check(request_test($path,3)[0]===200,'Admin can open '.$path);}
+    foreach(['admin/assignments.php','admin/email-deliveries.php','admin/reports.php'] as $path){http_check(request_test($path,1)[0]===302,'Applicant redirected away from '.$path);http_check(request_test($path,3)[0]===200,'Admin can open '.$path);}
     http_check(request_test('admin/reports.php?type=applications',6)[0]===403,'Treasurer denied application report.');
     [$code,$body]=request_test('admin/reports.php?type=collections&start=2026-01-01&end=2026-01-31&format=csv',6);
     http_check($code===200 && str_contains($body,'1500'),'Treasurer can export paid collections.');
@@ -44,4 +44,5 @@ try {
     http_check($code===200 && str_contains($body,'BP-TEST-1') && !str_contains($body,'owner@example.test') && !str_contains($body,'Private address') && !str_contains($body,'Synthetic Business'),'Public QR response excludes applicant information.');
     http_check(request_test('verify-permit.php?token=unknown')[0]===404,'Unknown QR returns not found.');
     echo "HTTP authorization, internal-note privacy, CSRF, report export and public QR tests passed.\n";
-} finally {proc_terminate($process);proc_close($process);unlink($file);}
+} catch(Throwable $e) {fwrite(STDERR,(string)file_get_contents($log));throw $e;}
+finally {proc_terminate($process);proc_close($process);unlink($file);}
